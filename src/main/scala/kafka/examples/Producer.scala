@@ -16,19 +16,24 @@
  */
 package kafka.examples
 
+import java.util.concurrent.atomic.AtomicBoolean
+
 import kafka.producer.KeyedMessage
 import kafka.producer.ProducerConfig
 import java.util.Properties
 
-class Producer(val topic: String) extends Thread {
+class Producer(val topic: String, continue: AtomicBoolean) extends Thread {
 
   override def run(): Unit = {
     var messageNo = 1
-    while (true) {
+    while (continue.get()) {
       val messageStr = "Message_" + messageNo
       producer.send(new KeyedMessage(topic, messageStr))
       messageNo += 1
+      Thread.sleep(10)
     }
+
+    println(s"finish producer for $topic")
   }
 
   private lazy val producer: kafka.producer.Producer[Int, String] = {

@@ -16,6 +16,9 @@
  */
 package kafka.examples
 
+import java.util.concurrent.{TimeUnit, CountDownLatch}
+import java.util.concurrent.atomic.AtomicBoolean
+
 import kafka.api.FetchRequestBuilder
 import kafka.consumer.SimpleConsumer
 import kafka.message.ByteBufferMessageSet
@@ -31,10 +34,10 @@ object SimpleConsumerDemo {
     }
   }
 
-  private def generateData(): Unit = {
-    val producer2 = new Producer(KafkaProperties.topic2)
+  private def generateData(continue: AtomicBoolean): Unit = {
+    val producer2 = new Producer(KafkaProperties.topic2, continue)
     producer2.start()
-    val producer3 = new Producer(KafkaProperties.topic3)
+    val producer3 = new Producer(KafkaProperties.topic3, continue)
     producer3.start()
     try {
       Thread.sleep(1000)
@@ -45,8 +48,13 @@ object SimpleConsumerDemo {
     }
   }
 
+  def awaitInputEnterKey(): Unit = {
+    while(System.in.read() != 10){}
+  }
+
   def main(args: Array[String]) {
-    generateData()
+    val continue = new AtomicBoolean(true)
+    generateData(continue)
 
     val simpleConsumer = new SimpleConsumer(
       KafkaProperties.kafkaServerURL,
@@ -69,12 +77,25 @@ object SimpleConsumerDemo {
     val req2 = new FetchRequestBuilder().clientId(KafkaProperties.clientId).addFetch(KafkaProperties.topic2, 0, 0L, 100).addFetch(KafkaProperties.topic3, 0, 0L, 100).build()
     val fetchResponse2 = simpleConsumer.fetch(req2)
     var fetchReq = 0
+    val latch = new CountDownLatch(2)
     topicMap.foreach{ case (topic, offsets) =>
       offsets.foreach{ offset =>
         fetchReq += 1
-        println("Response from fetch request no: " + fetchReq)
+        latch.countDown()
+        println(s"Response $topic, no: $fetchReq")
         printMessages(fetchResponse2.messageSet(topic, offset))
       }
     }
+
+    val result = latch.await(10, TimeUnit.SECONDS)
+    if(result){
+      println("正常終了")
+    }else{
+      println("異常終了 " + latch.getCount)
+    }
+    continue.set(false)
+
+    println("main 終了")
+//    awaitInputEnterKey()
   }
 }
